@@ -169,7 +169,7 @@ void TwoPhaseInfluenceMaximization::run() {
 
     INFO("Phase 1: Parameter estimation");
     double kpt = estimateKpt(G, k, l, model);
-    if (!handler.isRunning()) return;
+    handler.assureRunning();
 
     count n = G.numberOfNodes();
     double lambda = (8 + 2 * epsilon) * n
@@ -179,6 +179,8 @@ void TwoPhaseInfluenceMaximization::run() {
 
     INFO("Phase 2: Node selection");
     influencers = selectInfluencers(G, k, theta, model);
+
+    hasRun = true;
 }
 
 }

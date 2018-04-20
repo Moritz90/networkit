@@ -10488,3 +10488,28 @@ cdef class PivotMDS (GraphLayoutAlgorithm):
 		"""Constructs a PivotMDS object for the given @a graph. The algorithm should embed the graph in @a dim dimensions using @a numberOfPivots pivots."""
 		(<_PivotMDS*>(self._this)).run()
 		return self
+
+
+
+cdef extern from "cpp/influence/TwoPhaseInfluenceMaximization.h" namespace "NetworKit::TwoPhaseInfluenceMaximization":
+	cdef cppclass _TwoPhaseInfluenceMaximization "NetworKit::TwoPhaseInfluenceMaximization"(_Algorithm):
+		_TwoPhaseInfluenceMaximization(_Graph G, count k, double epsilon, double l) except +
+		unordered_set[node] topKInfluencers() nogil except +
+
+
+cdef class TwoPhaseInfluenceMaximization(Algorithm):
+	"""
+	TODO: docstring
+	"""
+
+	cdef Graph _G
+
+	def __cinit__(self, Graph G not None, count k, double epsilon, double l):
+		self._G = G
+		self._this = new _TwoPhaseInfluenceMaximization(G._this, k, epsilon, l)
+
+	def __dealloc__(self):
+		self._G = None # just to be sure the graph is deleted
+
+	def getInfluencers(self):
+		return (<_TwoPhaseInfluenceMaximization*>(self._this)).topKInfluencers()
