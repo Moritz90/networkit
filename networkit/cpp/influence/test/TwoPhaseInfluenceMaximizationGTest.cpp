@@ -43,7 +43,33 @@ TEST_F(TwoPhaseInfluenceMaximizationGTest, twoStarsGraph) {
     EXPECT_GE(correct_tries, 9) << "algorithm failed to produce optimal result more than 90% of the time";
 }
 
-// TODO: add second test graph with non-deterministic propagation
+TEST_F(TwoPhaseInfluenceMaximizationGTest, exampleGraph) {
+    // example graph from Tang's paper (slightly modified)
+    auto builder = GraphBuilder(4, true, true);
+    builder.addHalfEdge(3, 0, 0.8);
+    builder.addHalfEdge(2, 3, 0.1);
+    builder.addHalfEdge(2, 0, 0.1);
+    builder.addHalfEdge(1, 3, 0.1);
+    builder.addHalfEdge(1, 0, 0.1);
+    const auto G = builder.toGraph(true);
+
+    INFO("G: " , G.toString());
+
+    const auto expected_result = std::unordered_set<node>{3};
+    count correct_tries = 0;
+    for (count i = 0; i < 10; ++i) {
+        TwoPhaseInfluenceMaximization tim{G, 1, 0.1, 1.0};
+        tim.run();
+        auto result = tim.topKInfluencers();
+        if (result == expected_result) {
+            correct_tries++;
+        } else {
+            INFO(std::string{"Mismatch detected. Actual result: "} + Aux::toString(result));
+        }
+    }
+
+    EXPECT_GE(correct_tries, 9) << "algorithm failed to produce optimal result more than 90% of the time";
+}
 
 } /* namespace NetworKit */
 
