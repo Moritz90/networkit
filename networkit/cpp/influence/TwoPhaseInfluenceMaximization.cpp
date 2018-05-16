@@ -27,25 +27,38 @@ using NetworKit::node;
 using Model = NetworKit::TwoPhaseInfluenceMaximization::Model;
 
 void randomReverseReachableSet(const Graph& G, Model model, std::function<void(node)> inserter) {
-    // FIXME: support computing RR sets for LT model
-    if (model == Model::LINEAR_THRESHOLD) {
-        throw std::invalid_argument("generating RR sets under the LT model is not supported yet");
-    }
-
     auto bfsQueue = std::queue<node>{};
     bfsQueue.push(G.randomNode());
     auto visited = std::vector<bool>(G.numberOfNodes(), false);
-    while (!bfsQueue.empty()) {
-        node n = bfsQueue.front();
-        bfsQueue.pop();
-        inserter(n);
+    if (model == Model::INDEPENDENT_CASCADE) {
+        while (!bfsQueue.empty()) {
+            node n = bfsQueue.front();
+            bfsQueue.pop();
+            inserter(n);
 
-        G.forInEdgesOf(n, [&bfsQueue, &visited](node v, edgeweight weight) {
-            if (!visited[v] && probability() <= weight) {
-                bfsQueue.push(v);
-                visited[v] = true;
-            }
-        });
+            G.forInEdgesOf(n, [&bfsQueue, &visited](node v, edgeweight weight) {
+                if (!visited[v] && probability() <= weight) {
+                    bfsQueue.push(v);
+                    visited[v] = true;
+                }
+            });
+        }
+    } else {
+        while (!bfsQueue.empty()) {
+            node n = bfsQueue.front();
+            bfsQueue.pop();
+            inserter(n);
+
+            auto randomNumber = probability();
+            auto acc = 0.0;
+            G.forInEdgesOf(n, [&bfsQueue, &visited, randomNumber, &acc](node v, edgeweight weight) {
+                if (!visited[v] && randomNumber > acc && randomNumber <= acc + weight) {
+                    bfsQueue.push(v);
+                    visited[v] = true;
+                }
+                acc += weight;
+            });
+        }
     }
 }
 
