@@ -2,7 +2,6 @@
 
 #include "../auxiliary/BucketPQ.h"
 #include "../auxiliary/Log.h"
-#include "../auxiliary/MissingMath.h"
 #include "../auxiliary/Random.h"
 #include "../auxiliary/SignalHandling.h"
 
@@ -69,7 +68,7 @@ double estimateKpt(const Graph& G, count k, double l, Model model) {
         double c = (6 * l * std::log(n) + 6 * std::log(std::log2(n))) * std::exp2(i);
         double sum = 0;
         auto rrSet = std::vector<node>{};
-        DEBUG(std::to_string((count) std::ceil(c)) + " RR sets will be generated to guess mean expected spread");
+        INFO(std::to_string((count) std::ceil(c)) + " RR sets will be generated to guess mean expected spread");
         for (count j = 0; j < c; ++j) {
             rrSet.clear();
             randomReverseReachableSet(G, model, [&rrSet](node n) { rrSet.push_back(n); });
@@ -92,12 +91,13 @@ using hyperedge = std::vector<node>;
 std::unordered_set<node> selectInfluencers(const Graph& G, count k, count theta, Model model) {
     auto result = std::unordered_set<node>{};
 
+    INFO(std::to_string(theta) + " random RR sets will be generated to select the influencers");
+
     auto hyperedges = std::vector<hyperedge>(theta);
     auto hyperedgesDeleted = std::vector<bool>(theta, false);
     auto hypergraphAdjacencyLists = std::vector<adjacencyList>(G.numberOfNodes());
     auto hypergraphPriorities = std::vector<count>(G.numberOfNodes(), theta);
 
-    DEBUG(std::to_string(theta) + " random RR sets will be generated to select the influencers");
     for (index edge = 0; edge < theta; ++edge) {
         randomReverseReachableSet(G, model,
                 [&hyperedges, &hypergraphAdjacencyLists, &hypergraphPriorities, edge](node n) {
@@ -126,6 +126,17 @@ std::unordered_set<node> selectInfluencers(const Graph& G, count k, count theta,
                 }
             }
         }
+    }
+
+    return result;
+}
+
+double log_bin(count n, count k) {
+    // calculates ln(n choose k), avoiding integer overflow in case n is large. n > k is assumed.
+    double result = 0.0;
+
+    for (count i = 0; i < k; ++i) {
+        result += std::log(static_cast<double>(n - i) / (k - i));
     }
 
     return result;
@@ -175,8 +186,6 @@ TwoPhaseInfluenceMaximization::TwoPhaseInfluenceMaximization(const Graph& G, cou
 #endif
 }
 
-using Aux::MissingMath::binomial;
-
 void TwoPhaseInfluenceMaximization::run() {
     Aux::SignalHandler handler;
 
@@ -186,7 +195,7 @@ void TwoPhaseInfluenceMaximization::run() {
 
     count n = G.numberOfNodes();
     double lambda = (8 + 2 * epsilon) * n
-        * (l * std::log(n) + std::log(binomial(n, k)) + std::log(2))
+        * (l * std::log(n) + log_bin(n, k) + std::log(2))
         * std::pow(epsilon, -2);
     count theta = std::ceil(lambda / kpt); // TODO: verify that rounding is correct
 
