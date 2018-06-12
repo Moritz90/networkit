@@ -99,11 +99,13 @@ std::unordered_set<node> extractTopK(count k, const HyperEdges& hyperedges,
 
 double refineKpt(const Graph& G, count k, double epsilon, double l, Model model, double kpt1,
         std::unordered_set<node> topK) {
+    INFO("Original lower bound: " + std::to_string(kpt1));
     double epsilon2 = 5 * std::cbrt(l * std::pow(epsilon, 2) / (k + l));
     count n = G.numberOfNodes();
     double lambda2 = (2 + epsilon2) * l * n * std::log(n) * std::pow(epsilon, -2);
     // TODO: verify that rounding is correct
     double theta2 = std::ceil(lambda2 / kpt1);
+    INFO(std::to_string((count) std::ceil(theta2)) + " RR sets will be generated to refine the lower bound.");
     count coveredSets = 0;
     // avoid non-constant-time check in lambda below
     auto inTopK = std::vector<bool>(n, false);
@@ -120,7 +122,10 @@ double refineKpt(const Graph& G, count k, double epsilon, double l, Model model,
         }
     }
     double f = coveredSets / theta2;
-    return std::max(kpt1, f * n / (1 + epsilon2));
+    INFO("Covered sets in sample: " + std::to_string(f));
+    double result = std::max(kpt1, f * n / (1 + epsilon2));
+    INFO("Refined lower bound: " + std::to_string(result));
+    return result;
 }
 
 double estimateKpt(const Graph& G, count k, double epsilon, double l, Model model) {
