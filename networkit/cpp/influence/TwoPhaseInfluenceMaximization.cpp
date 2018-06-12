@@ -215,6 +215,9 @@ TwoPhaseInfluenceMaximization::TwoPhaseInfluenceMaximization(const Graph& G, cou
         throw std::invalid_argument("the given seed set size is larger than the number of nodes in the given graph");
     }
 
+    // raise success probability to (1 - n ^ - @a l)
+    l *= 1 + (std::log(3) / std::log(G.numberOfNodes()));
+
 #ifdef DEBUG
     // check preconditions
     if (model == Model::LINEAR_THRESHOLD) {

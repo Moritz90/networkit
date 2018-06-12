@@ -26,7 +26,7 @@ public:
      * Constructs an instance of the two-phase influence maximization algorithm.
      *
      * This instance will find an (1 - 1/e - @a epsilon)-approximate solution to the influence maximization problem with
-     * initial seed set size @a k on graph @a G with a probability of at least (1 - 2 * n ^ - @a l).
+     * initial seed set size @a k on graph @a G with a probability of at least (1 - n ^ - @a l).
      *
      * The expected runtime of the algorithm is O((@a k + @a l) (m + n) log n / (@a epsilon ^ 2)).
      */
