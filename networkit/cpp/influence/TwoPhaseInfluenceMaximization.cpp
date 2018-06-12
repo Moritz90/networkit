@@ -61,14 +61,53 @@ void randomReverseReachableSet(const Graph& G, Model model, std::function<void(n
     }
 }
 
-double estimateKpt(const Graph& G, count k, double l, Model model) {
+using AdjacencyList = std::vector<index>;
+using Hyperedge = std::vector<node>;
+using HyperEdges = std::vector<Hyperedge>;
+using HyperGraphAdjacencyLists = std::vector<AdjacencyList>;
+
+std::unordered_set<node> extractTopK(count k, const HyperEdges& hyperedges,
+        const HyperGraphAdjacencyLists& hypergraphAdjacencyLists, std::vector<count>& nodePriorities) {
+    auto result = std::unordered_set<node>{};
+
+    assert(hyperedges.size() <= std::numeric_limits<std::int64_t>::max());
+    auto priorityQueue = Aux::BucketPQ(hypergraphAdjacencyLists.size(), 0, static_cast<std::int64_t>(hyperedges.size()));
+    for (index node = 0; node < hypergraphAdjacencyLists.size(); ++node) {
+        priorityQueue.insert(nodePriorities[node], node);
+    }
+
+    auto hyperedgesDeleted = std::vector<bool>(hyperedges.size(), false);
+
+    for (count i = 0; i < k; ++i) {
+        index node;
+        std::tie(std::ignore, node) = priorityQueue.extractMin();
+        result.insert(node);
+        for (auto edge : hypergraphAdjacencyLists[node]) {
+            if (!hyperedgesDeleted[edge]) {
+                hyperedgesDeleted[edge] = true;
+                for (auto neighbor : hyperedges[edge]) {
+                    nodePriorities[neighbor]++;
+                    priorityQueue.changeKey(nodePriorities[neighbor], neighbor);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+double refineKpt(const Graph& G, count k, double epsilon, double l, double kpt1) {
+    return kpt1;
+}
+
+double estimateKpt(const Graph& G, count k, double epsilon, double l, Model model) {
     // TODO: verify that rounding is correct everywhere here
     for (count i = 1; i <= std::ceil(std::log2(G.numberOfNodes() - 1)); ++i) {
         count n = G.numberOfNodes();
         double c = (6 * l * std::log(n) + 6 * std::log(std::log2(n))) * std::exp2(i);
         double sum = 0;
         auto rrSet = std::vector<node>{};
-        INFO(std::to_string((count) std::ceil(c)) + " RR sets will be generated to guess mean expected spread");
+        INFO(std::to_string((count) std::ceil(c)) + " RR sets will be generated to establish a lower bound for the maximum spread");
         for (count j = 0; j < c; ++j) {
             rrSet.clear();
             randomReverseReachableSet(G, model, [&rrSet](node n) { rrSet.push_back(n); });
@@ -79,23 +118,17 @@ double estimateKpt(const Graph& G, count k, double l, Model model) {
             sum += 1 - std::pow(1 - static_cast<double>(width) / G.numberOfEdges(), k);
         }
         if (sum / c > 1 / std::exp2(i)) {
-            return n * sum / (2 * c);
+            return refineKpt(G, k, epsilon, l, n * sum / (2 * c));
         }
     }
-    return 1.0;
+    return refineKpt(G, k, epsilon, l, 1.0);
 }
 
-using adjacencyList = std::vector<index>;
-using hyperedge = std::vector<node>;
-
 std::unordered_set<node> selectInfluencers(const Graph& G, count k, count theta, Model model) {
-    auto result = std::unordered_set<node>{};
-
     INFO(std::to_string(theta) + " random RR sets will be generated to select the influencers");
 
-    auto hyperedges = std::vector<hyperedge>(theta);
-    auto hyperedgesDeleted = std::vector<bool>(theta, false);
-    auto hypergraphAdjacencyLists = std::vector<adjacencyList>(G.numberOfNodes());
+    auto hyperedges = HyperEdges(theta);
+    auto hypergraphAdjacencyLists = HyperGraphAdjacencyLists(G.numberOfNodes());
     auto hypergraphPriorities = std::vector<count>(G.numberOfNodes(), theta);
 
     for (index edge = 0; edge < theta; ++edge) {
@@ -107,28 +140,7 @@ std::unordered_set<node> selectInfluencers(const Graph& G, count k, count theta,
         });
     }
 
-    assert(theta <= std::numeric_limits<std::int64_t>::max());
-    auto priorityQueue = Aux::BucketPQ(G.numberOfNodes(), 0, static_cast<std::int64_t>(theta));
-    for (index node = 0; node < hypergraphAdjacencyLists.size(); ++node) {
-        priorityQueue.insert(hypergraphPriorities[node], node);
-    }
-
-    for (count i = 0; i < k; ++i) {
-        index node;
-        std::tie(std::ignore, node) = priorityQueue.extractMin();
-        result.insert(node);
-        for (auto edge : hypergraphAdjacencyLists[node]) {
-            if (!hyperedgesDeleted[edge]) {
-                hyperedgesDeleted[edge] = true;
-                for (auto neighbor : hyperedges[edge]) {
-                    hypergraphPriorities[neighbor]++;
-                    priorityQueue.changeKey(hypergraphPriorities[neighbor], neighbor);
-                }
-            }
-        }
-    }
-
-    return result;
+    return extractTopK(k, hyperedges, hypergraphAdjacencyLists, hypergraphPriorities);
 }
 
 double log_bin(count n, count k) {
@@ -190,7 +202,7 @@ void TwoPhaseInfluenceMaximization::run() {
     Aux::SignalHandler handler;
 
     INFO("Phase 1: Parameter estimation");
-    double kpt = estimateKpt(G, k, l, model);
+    double kpt = estimateKpt(G, k, epsilon, l, model);
     handler.assureRunning();
 
     count n = G.numberOfNodes();
