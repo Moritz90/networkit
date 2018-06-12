@@ -5,6 +5,7 @@
 #include "../auxiliary/Random.h"
 #include "../auxiliary/SignalHandling.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <functional>
@@ -96,32 +97,78 @@ std::unordered_set<node> extractTopK(count k, const HyperEdges& hyperedges,
     return result;
 }
 
-double refineKpt(const Graph& G, count k, double epsilon, double l, double kpt1) {
-    return kpt1;
+double refineKpt(const Graph& G, count k, double epsilon, double l, Model model, double kpt1,
+        std::unordered_set<node> topK) {
+    double epsilon2 = 5 * std::cbrt(l * std::pow(epsilon, 2) / (k + l));
+    count n = G.numberOfNodes();
+    double lambda2 = (2 + epsilon2) * l * n * std::log(n) * std::pow(epsilon, -2);
+    // TODO: verify that rounding is correct
+    double theta2 = std::ceil(lambda2 / kpt1);
+    count coveredSets = 0;
+    // avoid non-constant-time check in lambda below
+    auto inTopK = std::vector<bool>(n, false);
+    for (auto& node : topK) {
+        inTopK[node] = true;
+    }
+    for (count i = 0; i < theta2; ++i) {
+        bool covered = false;
+        randomReverseReachableSet(G, model, [&covered, &inTopK](node n) {
+            covered = covered || inTopK[n];
+        });
+        if (covered) {
+            coveredSets++;
+        }
+    }
+    double f = coveredSets / theta2;
+    return std::max(kpt1, f * n / (1 + epsilon2));
 }
 
 double estimateKpt(const Graph& G, count k, double epsilon, double l, Model model) {
+    // data structures to get top K of last iteration for refineKpt
+    auto hyperedges = HyperEdges();
+    auto hypergraphAdjacencyLists = HyperGraphAdjacencyLists(G.numberOfNodes());
+    auto hypergraphPriorities = std::vector<count>(G.numberOfNodes());
+
     // TODO: verify that rounding is correct everywhere here
     for (count i = 1; i <= std::ceil(std::log2(G.numberOfNodes() - 1)); ++i) {
         count n = G.numberOfNodes();
         double c = (6 * l * std::log(n) + 6 * std::log(std::log2(n))) * std::exp2(i);
         double sum = 0;
         auto rrSet = std::vector<node>{};
+        // re-initialize hypergraph data structures
+        count edgeCount = std::ceil(c);
+        hyperedges.clear();
+        hyperedges.resize(edgeCount);
+        std::fill(hypergraphAdjacencyLists.begin(), hypergraphAdjacencyLists.end(), AdjacencyList{});
+        std::fill(hypergraphPriorities.begin(), hypergraphPriorities.end(), edgeCount);
+
         INFO(std::to_string((count) std::ceil(c)) + " RR sets will be generated to establish a lower bound for the maximum spread");
+
         for (count j = 0; j < c; ++j) {
             rrSet.clear();
-            randomReverseReachableSet(G, model, [&rrSet](node n) { rrSet.push_back(n); });
+            randomReverseReachableSet(G, model,
+                    [&rrSet, &hyperedges, &hypergraphAdjacencyLists, &hypergraphPriorities, j](node n) {
+                rrSet.push_back(n);
+                // also fill data structures for refineKpt in case this is the last iteration
+                hyperedges[j].push_back(n);
+                hypergraphAdjacencyLists[n].push_back(j);
+                hypergraphPriorities[n]--;
+            });
             count width = 0;
             for (auto n : rrSet) {
                 width += G.degreeIn(n);
             }
             sum += 1 - std::pow(1 - static_cast<double>(width) / G.numberOfEdges(), k);
         }
+
         if (sum / c > 1 / std::exp2(i)) {
-            return refineKpt(G, k, epsilon, l, n * sum / (2 * c));
+            return refineKpt(G, k, epsilon, l, model, n * sum / (2 * c),
+                    extractTopK(k, hyperedges, hypergraphAdjacencyLists, hypergraphPriorities));
         }
     }
-    return refineKpt(G, k, epsilon, l, 1.0);
+
+    return refineKpt(G, k, epsilon, l, model, 1.0,
+            extractTopK(k, hyperedges, hypergraphAdjacencyLists, hypergraphPriorities));
 }
 
 std::unordered_set<node> selectInfluencers(const Graph& G, count k, count theta, Model model) {
